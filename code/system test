@@ -1,0 +1,292 @@
+# 06_full_system_test.py - tests every part of UOM-1, one at a time.
+#
+# Save as code.py on CIRCUITPY, open the Serial Monitor, and answer the questions
+# by typing y or n and pressing Enter. Optional: uom_config.py on CIRCUITPY (for the
+# Wi-Fi and Telegram tests) and lib/adafruit_requests (for the Telegram test).
+#
+#   1. Speaker silence   is the speaker quiet when the code tells it to be?
+#   2. Pico LED          3 blinks
+#   3. NeoPixel ring     red, green, blue, white
+#   4. Speaker           3 rising beeps, then silence
+#   5. Button            press it
+#   6. Scale (HX711)     speed, stuck or saturated line, noise, optional 100 g check
+#   7. Wi-Fi             finds and joins the hotspot, reaches the internet
+#   8. Telegram          checks the bot token, sends a test message to each recipient
+#
+# Pins (your wiring): HX711 DT GP5, SCK GP6 · ring GP18 · speaker A+ GP20 · button GP17
+ 
+import board
+import digitalio
+import pwmio
+import time
+import neopixel_write
+ 
+DT_PIN, SCK_PIN = board.GP5, board.GP6
+RING_PIN = board.GP18
+SPEAKER_PIN = board.GP20
+BUTTON_PIN = board.GP17
+FACTOR = 2220.7          # counts per gram
+ 
+results = []
+ 
+ 
+def result(name, ok, note=""):
+    results.append((name, ok, note))
+    print("   ->", "PASS" if ok else ("SKIP" if ok is None else "FAIL"), note)
+ 
+ 
+def ask(question):
+    while True:
+        a = input("   " + question + " (y/n): ").strip().lower()
+        if a in ("y", "n"):
+            return a == "y"
+ 
+ 
+# ---------------- set-up: speaker OFF first ----------------
+speaker = pwmio.PWMOut(SPEAKER_PIN, frequency=880, duty_cycle=0, variable_frequency=True)
+led = digitalio.DigitalInOut(board.LED)
+led.direction = digitalio.Direction.OUTPUT
+ring = digitalio.DigitalInOut(RING_PIN)
+ring.direction = digitalio.Direction.OUTPUT
+button = digitalio.DigitalInOut(BUTTON_PIN)
+button.direction = digitalio.Direction.INPUT
+button.pull = digitalio.Pull.UP
+dt = digitalio.DigitalInOut(DT_PIN)
+dt.direction = digitalio.Direction.INPUT
+sck = digitalio.DigitalInOut(SCK_PIN)
+sck.direction = digitalio.Direction.OUTPUT
+sck.value = False
+ 
+ 
+def ring_colour(r, g, b):
+    neopixel_write.neopixel_write(ring, bytearray([g, r, b] * 16))
+ 
+ 
+def tone(freq, ms):
+    speaker.frequency = freq
+    speaker.duty_cycle = 32768
+    time.sleep(ms / 1000)
+    speaker.duty_cycle = 0
+ 
+ 
+def read_raw(timeout=1.0):
+    start = time.monotonic()
+    while dt.value:
+        if time.monotonic() - start > timeout:
+            return None
+    v = 0
+    for _ in range(24):
+        sck.value = True
+        v = (v << 1) | dt.value
+        sck.value = False
+    sck.value = True
+    sck.value = False
+    return v - 0x1000000 if v & 0x800000 else v
+ 
+ 
+def measure(n=20):
+    vals = []
+    for _ in range(n):
+        r = read_raw()
+        if r is None:
+            return None, None
+        vals.append(r)
+    m = sum(vals) / n
+    return m, (sum((v - m) ** 2 for v in vals) / n) ** 0.5
+ 
+ 
+try:
+    ring_colour(0, 0, 0)
+    print("\n" + "=" * 52)
+    print("UOM-1 FULL SYSTEM TEST")
+    print("=" * 52)
+ 
+    # 1. speaker silence
+    print("\n[1/8] SPEAKER SILENCE: the code has turned the speaker OFF.")
+    time.sleep(2)
+    if ask("Is the speaker completely silent now?"):
+        result("Speaker silent when off", True)
+    else:
+        result("Speaker silent when off", False,
+               "noise is NOT from the code: see the notes printed below")
+        print("""   The code is not driving the speaker, so the sound is electrical noise:
+   - Turn the amplifier's volume screw anticlockwise (it amplifies any noise).
+   - Check A- goes to GND and A+ to GP20 (a loose A+ picks up hum like an antenna).
+   - Power the amplifier from VSYS, keep its wires short and away from the ring's wires.
+   - Pull the A+ wire out: still noisy? Then it is the amplifier's power or ground.""")
+ 
+    # 2. Pico LED
+    print("\n[2/8] PICO LED: watch the small LED next to the USB port (3 blinks).")
+    for _ in range(3):
+        led.value = True
+        time.sleep(0.4)
+        led.value = False
+        time.sleep(0.4)
+    result("Pico LED", ask("Did it blink 3 times?"))
+ 
+    # 3. ring
+    print("\n[3/8] NEOPIXEL RING: red, green, blue, white (1 s each).")
+    for name, c in (("red", (40, 0, 0)), ("green", (0, 40, 0)), ("blue", (0, 0, 40)),
+                    ("white", (25, 25, 25))):
+        print("      " + name)
+        ring_colour(*c)
+        time.sleep(1)
+    ring_colour(0, 0, 0)
+    ok = ask("Did all 16 LEDs show all four colours?")
+    result("NeoPixel ring", ok, "" if ok else "check Data Input on GP18, 5V and GND")
+ 
+    # 4. speaker
+    print("\n[4/8] SPEAKER: 3 rising beeps, then silence.")
+    for f in (660, 880, 1320):
+        tone(f, 250)
+        time.sleep(0.2)
+    time.sleep(1)
+    ok = ask("Did you hear 3 beeps AND is it silent now?")
+    result("Speaker beeps", ok, "" if ok else "no beeps: volume screw, VIN on VSYS, A+ on GP20")
+ 
+    # 5. button
+    print("\n[5/8] BUTTON: press and release it within 15 s.")
+    end = time.monotonic() + 15
+    pressed = False
+    while time.monotonic() < end:
+        if not button.value:
+            pressed = True
+            ring_colour(40, 0, 0)
+            while not button.value:
+                time.sleep(0.02)
+            ring_colour(0, 0, 0)
+            break
+        time.sleep(0.02)
+    result("Button", pressed, "" if pressed else "check GP17 and GND, use diagonal legs")
+ 
+    # 6. scale
+    print("\n[6/8] SCALE: hang the EMPTY urimeter and keep it still.")
+    time.sleep(3)
+    start = time.monotonic()
+    count = 0
+    bad = 0
+    while time.monotonic() - start < 3:
+        r = read_raw(0.5)
+        if r is None:
+            continue
+        count += 1
+        if r in (0, -1) or abs(r) >= 8388000:
+            bad += 1
+    rate = count / 3
+    print("      {:.0f} readings per second, {} stuck or saturated".format(rate, bad))
+    if count == 0:
+        result("Scale", False, "HX711 not answering: 3V3, GND, DT on GP5, SCK on GP6")
+    elif rate > 100:
+        result("Scale", False, "far too many readings: DT line stuck low (check GP5 wiring)")
+    elif bad > count // 2:
+        result("Scale", False, "saturated: check the 4 load cell wires (E+ E- A- A+) and the mount")
+    else:
+        zero, sd = measure(30)
+        noise = sd / FACTOR
+        print("      empty reading {:.0f} counts, noise {:.3f} g".format(zero, noise))
+        result("Scale reads", noise < 1.0, "noise {:.3f} g".format(noise) if noise < 1.0
+               else "noisy: something is moving or a wire is loose")
+        if ask("Check accuracy with a 100 g mass now?"):
+            input("   Hang the 100 g mass, wait until still, press Enter: ")
+            m, _ = measure(30)
+            grams = (m - zero) / FACTOR
+            err = grams - 100
+            result("Scale 100 g check", abs(err) <= 2,
+                   "read {:.1f} g, error {:+.1f} g".format(grams, err))
+ 
+    # 7. Wi-Fi
+    print("\n[7/8] WI-FI: joining the hotspot in uom_config.py")
+    online = False
+    cfg = None
+    try:
+        import uom_config as cfg
+    except ImportError:
+        result("Wi-Fi", None, "no uom_config.py on CIRCUITPY")
+    if cfg is not None:
+        import wifi
+        import socketpool
+        ssid = getattr(cfg, "WIFI_SSID", "")
+        seen = False
+        try:
+            for n in wifi.radio.start_scanning_networks():
+                if n.ssid == ssid:
+                    seen = True
+                    print("      found '{}' (signal {} dBm, channel {})".format(ssid, n.rssi, n.channel))
+            wifi.radio.stop_scanning_networks()
+        except Exception as e:
+            print("      scan error:", e)
+        if not seen:
+            print("      '{}' not found: is the hotspot on and 2.4 GHz?".format(ssid))
+        try:
+            wifi.radio.connect(ssid, getattr(cfg, "WIFI_PASSWORD", ""))
+            print("      joined, address", wifi.radio.ipv4_address)
+            pool = socketpool.SocketPool(wifi.radio)
+            pool.getaddrinfo("api.telegram.org", 443)
+            online = True
+            result("Wi-Fi and internet", True, "address {}".format(wifi.radio.ipv4_address))
+        except Exception as e:
+            result("Wi-Fi and internet", False, str(e))
+ 
+    # 8. Telegram
+    print("\n[8/8] TELEGRAM")
+    token = getattr(cfg, "TELEGRAM_TOKEN", "") if cfg else ""
+    if not online or not token:
+        result("Telegram", None, "needs Wi-Fi with internet and TELEGRAM_TOKEN")
+    else:
+        try:
+            import ssl
+            import adafruit_requests
+            http = adafruit_requests.Session(pool, ssl.create_default_context())
+            base = "https://api.telegram.org/bot" + token + "/"
+            r = http.post(base + "getMe", json={}, timeout=10)
+            me = r.json()
+            r.close()
+            if not me.get("ok"):
+                result("Telegram token", False, me.get("description", "rejected"))
+            else:
+                result("Telegram token", True, "@" + me["result"]["username"])
+                recips = getattr(cfg, "RECIPIENTS", [])
+                if not recips:
+                    print("      No RECIPIENTS yet. Send /start to the bot now (30 s)...")
+                    r = http.post(base + "getUpdates", json={"timeout": 0}, timeout=10)
+                    first = r.json().get("result", [])
+                    r.close()
+                    time.sleep(30)
+                    off = first[-1]["update_id"] + 1 if first else 0
+                    r = http.post(base + "getUpdates", json={"offset": off, "timeout": 0}, timeout=10)
+                    for u in r.json().get("result", []):
+                        m = u.get("message", {})
+                        print("      chat_id {}  from {}".format(m.get("chat", {}).get("id"),
+                                                               m.get("from", {}).get("first_name", "?")))
+                    r.close()
+                for rc in recips:
+                    r = http.post(base + "sendMessage", json={
+                        "chat_id": rc["chat_id"],
+                        "text": "UOM-1 system test: {} ({}) can receive alerts.".format(
+                            rc["name"], ", ".join(rc["roles"]))}, timeout=10)
+                    ok = r.json().get("ok")
+                    r.close()
+                    result("Telegram to " + rc["name"], ok,
+                           "" if ok else "not delivered: did they press Start in the bot?")
+        except ImportError:
+            result("Telegram", None, "copy lib/adafruit_requests (circup install adafruit_requests)")
+        except Exception as e:
+            result("Telegram", False, str(e))
+ 
+finally:
+    speaker.duty_cycle = 0
+    ring_colour(0, 0, 0)
+ 
+# ---------------- summary ----------------
+print("\n" + "=" * 52)
+print("SUMMARY")
+for name, ok, note in results:
+    print("  {:5s} {} {}".format("PASS" if ok else ("SKIP" if ok is None else "FAIL"), name,
+                                 "- " + note if note else ""))
+print("=" * 52)
+fails = [x for x in results if x[1] is False]
+ring_colour(0, 40, 0) if not fails else ring_colour(40, 0, 0)
+print("All passed." if not fails else "{} failed: fix those first.".format(len(fails)))
+print("Put your normal code.py back when you are done.")
+while True:
+    time.sleep(1)
