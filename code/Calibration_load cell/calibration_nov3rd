@@ -1,0 +1,109 @@
+CSV,repeat,direction,mass_g,raw_mean,raw_sd
+Put 0 g on, wait until still, then press Enter: 
+CSV,1,up,0,0.0,0.0
+Put 1 g on, wait until still, then press Enter: 
+CSV,1,up,1,0.0,0.0
+Put 3 g on, wait until still, then press Enter: 
+CSV,1,up,3,0.2,1.1
+Put 8 g on, wait until still, then press Enter: 
+CSV,1,up,8,22937.6,143245.3
+   (noisy: something moved - consider redoing this run)
+Put 18 g on, wait until still, then press Enter: 
+CSV,1,up,18,0.0,0.0
+Put 38 g on, wait until still, then press Enter: 
+CSV,1,up,38,0.0,0.0
+Put 88 g on, wait until still, then press Enter: 
+CSV,1,up,88,0.0,0.0
+Put 188 g on, wait until still, then press Enter: 
+CSV,1,up,188,45875.2,286490.5
+   (noisy: something moved - consider redoing this run)
+Put 88 g on, wait until still, then press Enter: 
+CSV,1,down,88,0.0,0.0
+Put 38 g on, wait until still, then press Enter: 
+CSV,1,down,38,0.0,0.0
+Put 18 g on, wait until still, then press Enter: 
+CSV,1,down,18,0.0,0.0
+Put 8 g on, wait until still, then press Enter: 
+CSV,1,down,8,11.2,69.9
+Put 3 g on, wait until still, then press Enter: 
+CSV,1,down,3,0.0,0.0
+Put 1 g on, wait until still, then press Enter: 
+CSV,1,down,1,1433.6,8952.8
+   (noisy: something moved - consider redoing this run)
+Put 0 g on, wait until still, then press Enter: 
+CSV,1,down,0,205424.2,322.8
+Put 0 g on, wait until still, then press Enter: 
+CSV,2,up,0,205651.3,199.3
+Put 1 g on, wait until still, then press Enter: 
+CSV,2,up,1,204391.5,88.8
+Put 3 g on, wait until still, then press Enter: 
+CSV,2,up,3,206685.0,661.2
+   (noisy: something moved - consider redoing this run)
+Put 8 g on, wait until still, then press Enter: 
+CSV,2,up,8,212487.5,628.8
+   (noisy: something moved - consider redoing this run)
+Put 18 g on, wait until still, then press Enter: 
+
+CSV,2,up,18,173333.6,93396.6
+   (noisy: something moved - consider redoing this run)
+Put 38 g on, wait until still, then press Enter: 
+CSV,2,up,38,0.0,0.0
+Put 88 g on, wait until still, then press Enter: 
+CSV,2,up,88,355126.0,4171.1
+   (noisy: something moved - consider redoing this run)
+Put 188 g on, wait until still, then press Enter: 
+
+CSV,2,up,188,6553.6,40927.0
+   (noisy: something moved - consider redoing this run)
+Put 88 g on, wait until still, then press Enter: 
+CSV,2,down,88,0.0,0.0
+Put 38 g on, wait until still, then press Enter: 
+CSV,2,down,38,342645.9,645339.3
+   (noisy: something moved - consider redoing this run)
+Put 18 g on, wait until still, then press Enter: 
+CSV,2,down,18,251701.8,84.9
+Put 8 g on, wait until still, then press Enter: 
+CSV,2,down,8,251155.7,47.4
+Put 3 g on, wait until still, then press Enter: 
+CSV,2,down,3,236622.1,50.6
+Put 1 g on, wait until still, then press Enter: 
+CSV,2,down,1,236821.3,73.2
+Put 0 g on, wait until still, then press Enter: 
+CSV,2,down,0,229691.8,94.6
+Put 0 g on, wait until still, then press Enter: 
+CSV,3,up,0,276453.8,291545.0
+   (noisy: something moved - consider redoing this run)
+Put 1 g on, wait until still, then press Enter: 
+CSV,3,up,1,231971.3,54.2
+Put 3 g on, wait until still, then press Enter: 
+CSV,3,up,3,236604.9,60.4
+Put 8 g on, wait until still, then press Enter: 
+CSV,3,up,8,247821.2,83.4
+Put 18 g on, wait until still, then press Enter: 
+CSV,3,up,18,0.0,0.0
+Put 38 g on, wait until still, then press Enter: 
+CSV,3,up,38,0.0,0.0
+Put 88 g on, wait until still, then press Enter: 
+CSV,3,up,88,428297.8,120.8
+Put 188 g on, wait until still, then press Enter: 
+CSV,3,up,188,653187.6,493.6
+Put 88 g on, wait until still, then press Enter: 
+CSV,3,down,88,522266.9,587996.3
+   (noisy: something moved - consider redoing this run)
+Put 38 g on, wait until still, then press Enter: 
+CSV,3,down,38,315538.3,59.1
+Put 18 g on, wait until still, then press Enter: 
+CSV,3,down,18,270552.3,46.8
+Put 8 g on, wait until still, then press Enter: 
+CSV,3,down,8,248029.8,33.6
+Put 3 g on, wait until still, then press Enter: 
+CSV,3,down,3,237261.7,117.9
+Put 1 g on, wait until still, then press Enter: 
+CSV,3,down,1,232286.1,38.8
+Put 0 g on, wait until still, then press Enter: 
+CSV,3,down,0,230063.0,70.7
+RESULT counts_per_g = 463.623
+RESULT zero_counts  = 147187.9
+RESULT rms_residual_g = 336.436
+RESULT worst_residual_g = 903.404
+Done. Copy every line starting with CSV into calibration_data.csv on the laptop.
