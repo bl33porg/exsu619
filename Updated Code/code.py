@@ -1,15 +1,20 @@
 # code.py - UOM-1 urine output monitor with a Wi-Fi web interface
 #
-# Files on CIRCUITPY:  code.py, uom.py, uom_web.py, uom_telegram.py, uom_config.py,
-#                      dashboard.html, chart.umd.js, index.html (older page, at /classic),
-#                      lib/: adafruit_httpserver, adafruit_requests, adafruit_connection_manager
-#                      (circup install adafruit_httpserver adafruit_requests)
+# Files on CIRCUITPY: code.py, uom.py, uom_web.py, uom_telegram.py,
+#                     uom_config.py, dashboard.html, chart.umd.js,
+#                     index.html (older page, at /classic),
+#                     lib/: adafruit_httpserver, adafruit_requests,
+#                     adafruit_connection_manager
+#                     (circup install adafruit_httpserver adafruit_requests)
 #
 # Wi-Fi and Telegram settings live in uom_config.py (copy uom_config.example.py).
 #  - "station": the Pico joins a phone hotspot, sends Telegram alerts, and serves the
 #    dashboard at the address printed in the Serial Monitor.
 #  - "ap": the Pico makes its own network (no internet, no Telegram); open http://192.168.4.1
 # The dashboard opens at that address: enter the weight and press "Connect to service".
+#
+# HX711 DEBUG VERSION: prints a 1-second summary of raw HX711 reads.
+# Turn HX_DEBUG off after diagnosing the scale.
 
 import time
 import os
@@ -42,15 +47,18 @@ RECIPIENTS = getattr(cfg, "RECIPIENTS", [])
 
 # ===================== settings =====================
 
-FACTOR = 2220.7               # counts per gram, from your calibration
-SIMULATE = False              # True = fake bag, no load cell needed (for demos)
-SPEED = 1                     # demo: up to 60 (one minute per second). Never above 60.
+FACTOR = 2220.7              # counts per gram, from prior calibration
+SIMULATE = False             # True = fake bag, no load cell needed (for demos)
+SPEED = 60                    # demo: up to 60 (one minute per second). Never above 60.
 
-DT_PIN, SCK_PIN = board.GP7, board.GP6       # HX711
-RING_PIN = board.GP18                        # NeoPixel ring Data Input
-SPEAKER_PIN = board.GP14                     # PAM8302 A+
-BUTTON_PIN = board.GP17                      # acknowledge button
-BRIGHT = 40                                  # ring brightness, 0 to 255
+DT_PIN, SCK_PIN = board.GP2, board.GP6       # HX711
+RING_PIN = board.GP18                       # NeoPixel ring Data Input
+SPEAKER_PIN = board.GP14                    # PAM8302 A+
+BUTTON_PIN = board.GP17                     # acknowledge button
+BRIGHT = 40                                 # ring brightness, 0 to 255
+
+HX_DEBUG = True               # Set False after troubleshooting
+HX_DEBUG_INTERVAL_MS = 1000   # Print a summary once per second
 # ====================================================
 
 
@@ -87,13 +95,13 @@ sck.value = False
 
 
 def read_hx711():
-    """Raw count, or None if no new sample is ready yet."""
+    """Read a signed HX711 raw count, or None when no new sample is ready."""
     if dt.value:
         return None
     v = 0
     for _ in range(24):
         sck.value = True
-        v = (v << 1) | dt.value
+        v = (v << 1) | int(dt.value)
         sck.value = False
     sck.value = True
     sck.value = False
@@ -109,9 +117,10 @@ button.direction = digitalio.Direction.INPUT
 button.pull = digitalio.Pull.UP
 
 B = BRIGHT
-COLOURS = {"standby": (0, 0, B // 3), "normal": (0, B, 0), "advisory": (B, B * 45 // 100, 0),
-           "critical": (B, 0, 0), "technical": (0, B * 8 // 10, B), "off": (0, 0, 0)}
-FLASH = {"advisory": 1000, "critical": 250}          # half-period in ms (0.5 Hz, 2 Hz)
+COLOURS = {"standby": (0, 0, B // 3), "normal": (0, B, 0),
+           "advisory": (B, B * 45 // 100, 0), "critical": (B, 0, 0),
+           "technical": (0, B * 8 // 10, B), "off": (0, 0, 0)}
+FLASH = {"advisory": 1000, "critical": 250}     # half-period in ms (0.5 Hz, 2 Hz)
 # (pitch Hz, [(on ms, off ms), ...], repeat every ms)
 SOUNDS = {"advisory": (660, [(150, 100)] * 3, 20000),
           "critical": (880, [(120, 80)] * 4 + [(120, 400)] + [(120, 80)] * 5, 10000),
@@ -198,7 +207,7 @@ if TELEGRAM_TOKEN and wifi.radio.ipv4_address is not None:
     except Exception as e:
         print("Telegram off:", e)
 elif TELEGRAM_TOKEN:
-    print("Telegram off: needs WIFI_MODE = \"station\" and a hotspot with internet")
+    print('Telegram off: needs WIFI_MODE = "station" and a hotspot with internet')
 
 # ---------------- main loop ----------------
 last_sample = ms()
@@ -206,6 +215,13 @@ last_none = 0
 last_gc = ms()
 pressed = False
 errors = []                    # times of recent unexpected errors
+
+# These counters diagnose HX711 communication without flooding the Serial Monitor.
+hx_debug_time = ms()
+hx_samples = 0                 # raw reads in this reporting interval
+hx_invalid = 0                 # reads rejected here as 0, -1 or saturated
+hx_last_raw = None             # most recent raw value within this interval
+hx_last_valid_ms = None        # time of last valid raw reading (not the Telegram pause)
 
 
 def survive(where, e):
@@ -235,17 +251,39 @@ while True:
                 app.mon.feed(g, t, wall, None if g is not None else "no_data")
         else:
             raw = read_hx711()
+
+            # HX711 diagnostic instrumentation: does not change Monitor.feed behavior.
+            if HX_DEBUG and raw is not None:
+                hx_samples += 1
+                hx_last_raw = raw
+                if raw in (0, -1) or raw >= 8388000 or raw <= -8388000:
+                    hx_invalid += 1
+                else:
+                    hx_last_valid_ms = t
+
+            if HX_DEBUG and t - hx_debug_time >= HX_DEBUG_INTERVAL_MS:
+                age = ("never" if hx_last_valid_ms is None
+                       else t - hx_last_valid_ms)
+                print("HX711 | samples:", hx_samples,
+                      "| invalid:", hx_invalid,
+                      "| last raw:", hx_last_raw,
+                      "| valid age ms:", age)
+                hx_debug_time = t
+                hx_samples = 0
+                hx_invalid = 0
+                hx_last_raw = None
+
             if raw is not None:
                 last_sample = t
                 if raw in (0, -1):
-                    app.mon.feed(None, t, wall, "no_data")          # DT line stuck low
+                    app.mon.feed(None, t, wall, "no_data")   # DT line stuck low
                 elif raw >= 8388000 or raw <= -8388000:
                     app.mon.feed(None, t, wall, "saturated")
                 else:
                     app.mon.feed(raw / FACTOR, t, wall)
             elif t - last_sample > 1000 and t - last_none >= 200:
                 last_none = t
-                app.mon.feed(None, t, wall, "no_data")              # no samples at all
+                app.mon.feed(None, t, wall, "no_data")       # no samples at all
 
         app.mon.tick(wall)
 
@@ -257,19 +295,19 @@ while True:
 
         level, sound = app.mon.signal()
         signals.update(t, level, sound)
-    except Exception as e:                  # never let one bad sample stop the alarms
+    except Exception as e:                   # never let one bad sample stop the alarms
         survive("measurement", e)
 
     try:
         server.poll()
-    except Exception as e:                  # a failed web request must not stop the monitor
+    except Exception as e:                   # a failed web request must not stop the monitor
         survive("web request", e)
 
     # Telegram: at most one request per loop, never while a beep is playing
     if bot is not None and speaker.duty_cycle == 0:
         try:
             if bot.step():
-                last_sample = ms()     # the pause was ours, not a scale fault
+                last_sample = ms()           # the pause was ours, not a scale fault
         except Exception as e:
             print("Telegram error:", e)
 
