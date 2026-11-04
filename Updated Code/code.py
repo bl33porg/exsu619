@@ -44,11 +44,11 @@ RECIPIENTS = getattr(cfg, "RECIPIENTS", [])
 
 FACTOR = 2220.7               # counts per gram, from your calibration
 SIMULATE = False              # True = fake bag, no load cell needed (for demos)
-SPEED = 60                    # demo: up to 60 (one minute per second). Never above 60.
+SPEED = 1                     # demo: up to 60 (one minute per second). Never above 60.
 
-DT_PIN, SCK_PIN = board.GP5, board.GP6       # HX711
+DT_PIN, SCK_PIN = board.GP7, board.GP6       # HX711
 RING_PIN = board.GP18                        # NeoPixel ring Data Input
-SPEAKER_PIN = board.GP20                     # PAM8302 A+
+SPEAKER_PIN = board.GP14                     # PAM8302 A+
 BUTTON_PIN = board.GP17                      # acknowledge button
 BRIGHT = 40                                  # ring brightness, 0 to 255
 # ====================================================
